@@ -149,20 +149,20 @@ export default function App() {
     const canNextPack = selectedCard != null && selectedCard.packIndex < packs.length - 1;
 
     return (
-        <main className="h-screen overflow-hidden">
+        <main className="h-screen overflow-y-auto xl:overflow-hidden">
 
             {/* ── Centered max-width shell ── */}
-            <section className="flex h-full max-w-screen-3xl mx-auto px-1 gap-3">
+            <section className="grid min-h-full max-w-screen-3xl mx-auto gap-3 px-2 py-3 md:grid-cols-2 xl:h-full xl:grid-cols-[18rem_minmax(0,1fr)_14rem] xl:px-1 xl:py-0">
 
                 {/* ══ LEFT RAIL ════════════════════════════ */}
                 {/* Vertically centered, fixed width, scrollable if content overflows */}
-                <aside className="w-72 shrink-0 flex flex-col overflow-y-auto py-4">
+                <aside className="min-w-0 flex flex-col xl:overflow-y-auto xl:py-4">
                     <div className={`${panel} grid gap-0 p-0 overflow-hidden`}>
 
                         {/* Brand header */}
                         <div className="px-4 pt-4 pb-3 border-b border-slate-700/50">
                             <p className={eyebrow}>5e Scroll Pack Opener</p>
-                            <h1 className="text-2xl font-bold leading-tight mt-1 mb-1 text-slate-50">Pack controls</h1>
+                            <h1 className="text-xl sm:text-2xl font-bold leading-tight mt-1 mb-1 text-slate-50">Pack controls</h1>
                             <p className={`${muted} leading-snug`}>Configure values, then open a batch on the right.</p>
                         </div>
 
@@ -205,7 +205,7 @@ export default function App() {
                         {/* Rarity weights */}
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
                             <p className={secTitle}>Rarity weights</p>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {rarityOrder.map((rarity) => (
                                     <label key={rarity} className={field}>
                                         <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium capitalize">{formatRarity(rarity)}</span>
@@ -238,12 +238,12 @@ export default function App() {
                 </aside>
 
                 {/* ══ CENTER: scrollable spell cards ════════════════════ */}
-                <section className="flex-1 min-w-0 overflow-y-auto py-4 px-3">
+                <section className="min-w-0 px-0 md:col-span-2 xl:col-span-1 xl:overflow-y-auto xl:py-4 xl:px-3">
                     <div className="grid gap-3">
 
                         {/* Spell cards panel */}
                         <div className={`${panel} p-4 w-full`}>
-                            <div className="flex items-center justify-between gap-2 mb-3">
+                            <div className="flex flex-col items-start justify-between gap-1.5 mb-3 sm:flex-row sm:items-center sm:gap-2">
                                 <h2 className="text-base font-semibold text-slate-100 mt-0 mb-0">Spell cards</h2>
                                 <span className={muted}>{packs.length} pack(s)</span>
                             </div>
@@ -260,7 +260,7 @@ export default function App() {
                                         return (
                                             <article key={`${packIndex}-${pack.length}`}
                                                 className="rounded-xl p-3 bg-slate-950/50 border border-slate-700/40">
-                                                <header className="flex justify-between items-start gap-2 mb-3">
+                                                <header className="flex flex-col justify-between items-start gap-1.5 mb-3 sm:flex-row sm:items-start sm:gap-2">
                                                     <div>
                                                         <h3 className="text-sm font-semibold text-slate-100 mt-0 mb-0.5">Pack {packIndex + 1}</h3>
                                                         <p className="text-slate-500 text-xs m-0">{conjCount} conjuration · {pack.length - conjCount} staple</p>
@@ -268,19 +268,19 @@ export default function App() {
                                                     <span className="text-xs text-slate-500 shrink-0">{pack.length} cards</span>
                                                 </header>
 
-                                                <ol className="list-none p-0 m-0 grid gap-2 grid-cols-[repeat(auto-fit,minmax(300px,1fr))]">
+                                                <ol className="list-none p-0 m-0 grid gap-2 grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
                                                     {pack.map((entry, cardIndex) => (
                                                         <li
                                                             key={`${entry.card.id}-${cardIndex}`}
                                                             onClick={() => setSelectedCard({ card: entry.card, pool: entry.pool, isShiny: entry.isShiny, packIndex, cardIndex })}
                                                             className="p-2.5 rounded-xl bg-white/4 border border-slate-700/40 hover:bg-white/8 transition-colors cursor-zoom-in"
                                                         >
-                                                            <div className={`grid grid-cols-[6rem_minmax(0,1fr)] gap-3 items-center relative${entry.isShiny ? ' shiny-card' : ''}`}>
+                                                            <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-3 items-center relative sm:grid-cols-[6rem_minmax(0,1fr)]${entry.isShiny ? ' shiny-card' : ''}`}>
                                                                 <img
                                                                     src={entry.card.imageUrl}
                                                                     alt={entry.card.fileName}
                                                                     loading="lazy"
-                                                                    className="w-24 h-32 object-contain rounded-lg border border-slate-700/40 bg-slate-950/80"
+                                                                    className="w-20 h-28 object-contain rounded-lg border border-slate-700/40 bg-slate-950/80 sm:w-24 sm:h-32"
                                                                 />
                                                                 <div className="min-w-0">
                                                                     <div className="font-semibold text-sm leading-tight text-slate-100 mb-0.5">{entry.card.displayName}</div>
@@ -306,7 +306,7 @@ export default function App() {
                 </section>
 
                 {/* ══ RIGHT RAIL: stats + analysis (vertically centered) ═ */}
-                <aside className="w-56 shrink-0 flex flex-col overflow-y-auto py-4 gap-3">
+                <aside className="min-w-0 grid gap-3 md:grid-cols-2 md:col-span-2 xl:grid-cols-1 xl:col-span-1 xl:overflow-y-auto xl:py-4">
 
                     {/* Session stats panel */}
                     <section className={`${panel} p-4`}>
@@ -374,9 +374,9 @@ export default function App() {
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* ── Header bar ── */}
-                        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-700/60 shrink-0">
+                        <div className="flex flex-wrap items-start justify-between gap-3 px-3 py-3 sm:px-5 border-b border-slate-700/60 shrink-0">
                             {/* Pack navigation */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 order-1">
                                 <button
                                     type="button"
                                     onClick={() => navigate(-1, 0)}
@@ -403,7 +403,7 @@ export default function App() {
                             </div>
 
                             {/* Card counter */}
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-slate-500 order-3 basis-full sm:order-2 sm:basis-auto">
                                 Card <span className="text-slate-300 font-semibold">{selectedCard.cardIndex + 1}</span>
                                 {' '}of <span className="text-slate-300 font-semibold">{currentPack?.length ?? 0}</span>
                                 {' '}·{' '}use <kbd className="px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">←</kbd>
@@ -418,7 +418,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => setSelectedCard(null)}
                                 aria-label="Close"
-                                className="w-8 h-8 rounded-xl grid place-items-center bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 text-lg p-0 transition-all hover:bg-slate-700/60 cursor-pointer"
+                                className="w-8 h-8 rounded-xl grid place-items-center bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 text-lg p-0 transition-all hover:bg-slate-700/60 cursor-pointer order-2 sm:order-3"
                             >
                                 ×
                             </button>
@@ -428,7 +428,7 @@ export default function App() {
                         <div className="flex flex-col sm:flex-row gap-0 overflow-hidden flex-1 min-h-0">
 
                             {/* Image area: [‹] [image] [›] as flex columns */}
-                            <div className="flex items-stretch sm:w-3/5 min-h-0 bg-slate-950/60">
+                            <div className="flex items-stretch sm:w-3/5 min-h-[16rem] sm:min-h-0 bg-slate-950/60">
 
                                 {/* Prev card button — left column */}
                                 <button
@@ -436,7 +436,7 @@ export default function App() {
                                     onClick={() => navigate(0, -1)}
                                     disabled={!canPrevCard}
                                     aria-label="Previous card"
-                                    className="w-14 shrink-0 flex items-center justify-center border-r border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                    className="w-12 sm:w-14 shrink-0 flex items-center justify-center border-r border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                                 >
                                     ‹
                                 </button>
@@ -450,7 +450,7 @@ export default function App() {
                                         src={selectedCard.card.imageUrl}
                                         alt={selectedCard.card.displayName}
                                         className="object-contain max-w-full max-h-full"
-                                        style={{ maxHeight: 'calc(100vh - 10rem)' }}
+                                        style={{ maxHeight: 'calc(100vh - 14rem)' }}
                                     />
                                 </div>
 
@@ -460,7 +460,7 @@ export default function App() {
                                     onClick={() => navigate(0, 1)}
                                     disabled={!canNextCard}
                                     aria-label="Next card"
-                                    className="w-14 shrink-0 flex items-center justify-center border-l border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                    className="w-12 sm:w-14 shrink-0 flex items-center justify-center border-l border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                                 >
                                     ›
                                 </button>
@@ -468,7 +468,7 @@ export default function App() {
 
                             {/* Metadata panel */}
                             <div className="sm:w-2/5 border-t sm:border-t-0 sm:border-l border-slate-700/60 flex flex-col overflow-y-auto">
-                                <div className="p-6 flex flex-col gap-4 flex-1">
+                                <div className="p-4 sm:p-6 flex flex-col gap-4 flex-1">
                                     {/* Eyebrow */}
                                     <div>
                                         <p className={eyebrow}>
@@ -476,7 +476,7 @@ export default function App() {
                                             {' · '}
                                             Card {selectedCard.cardIndex + 1} of {currentPack?.length ?? 0}
                                         </p>
-                                        <h2 id="modal-title" className="text-2xl font-bold text-slate-50 mt-1 mb-0 leading-tight">
+                                        <h2 id="modal-title" className="text-xl sm:text-2xl font-bold text-slate-50 mt-1 mb-0 leading-tight">
                                             {selectedCard.card.displayName}
                                         </h2>
                                         <p className="text-slate-500 text-sm mt-1 mb-0 break-words">
@@ -528,7 +528,7 @@ export default function App() {
                                     </div>
 
                                     {/* Card navigation buttons */}
-                                    <div className="flex gap-2 mt-auto pt-2">
+                                    <div className="flex flex-col sm:flex-row gap-2 mt-auto pt-2">
                                         <button
                                             type="button"
                                             onClick={() => navigate(0, -1)}
