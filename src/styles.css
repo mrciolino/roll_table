@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* ── Base ────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #0b1020;
+  background-image:
+    radial-gradient(circle at top,  rgba(122, 92, 255, 0.2),  transparent 30%),
+    radial-gradient(circle at right, rgba(72, 181, 255, 0.12), transparent 26%);
+  color: #eef2ff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.35;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
+button, input { font: inherit; }
+
+/* ── Shiny card shimmer  (::after can't be done with Tailwind utilities) ─── */
+.shiny-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.26), transparent 34%, rgba(226,232,240,0.18) 64%, rgba(148,163,184,0.12)),
+    linear-gradient(180deg, rgba(226,232,240,0.08), rgba(148,163,184,0.04));
+  box-shadow: inset 0 0 0 1px rgba(226,232,240,0.24);
+}
