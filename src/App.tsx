@@ -86,7 +86,7 @@ function generatePack(n: number, conjRate: number, weights: Record<SpellRarity, 
             throw new Error('No spell cards are available to generate a pack.');
         }
         const card = weightedPick(cards, (e) => weights[e.rarity] ?? 0);
-        return { card, pool, isShiny: Math.random() < 0.01 };
+        return { card, pool, isShiny: Math.random() < 0.10 }; // 10% shiny rate, just for fun
     });
 }
 function countBy<T extends string>(values: T[]) {
