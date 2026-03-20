@@ -492,8 +492,8 @@ export default function App() {
                                             `Level ${selectedCard.card.level}`,
                                             formatRarity(selectedCard.card.rarity),
                                             formatPool(selectedCard.pool),
-                                        ].map((item) => (
-                                            <span key={item} className="px-3 py-1 rounded-lg text-sm text-slate-300 bg-white/5 border border-slate-700/50">
+                                        ].map((item, index) => (
+                                            <span key={`${item}-${index}`} className="px-3 py-1 rounded-lg text-sm text-slate-300 bg-white/5 border border-slate-700/50">
                                                 {item}
                                             </span>
                                         ))}
