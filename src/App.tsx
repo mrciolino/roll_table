@@ -167,12 +167,14 @@ export default function App() {
         setShowMobileStats(false);
     }
     function handleCardTouchStart(e: TouchEvent<HTMLDivElement>) {
-        const touch = e.changedTouches[0];
+        const touch = e.changedTouches.item(0);
+        if (!touch) return;
         touchStart.current = { x: touch.clientX, y: touch.clientY };
     }
     function handleCardTouchEnd(e: TouchEvent<HTMLDivElement>) {
         if (!selectedCard || !touchStart.current) return;
-        const touch = e.changedTouches[0];
+        const touch = e.changedTouches.item(0);
+        if (!touch) return;
         const dx = touch.clientX - touchStart.current.x;
         const dy = touch.clientY - touchStart.current.y;
         touchStart.current = null;
