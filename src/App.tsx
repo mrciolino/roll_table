@@ -528,7 +528,7 @@ export default function App() {
                     role="presentation"
                 >
                     <div
-                        className={`${panel} relative flex flex-col w-full max-w-6xl overflow-hidden`}
+                        className={`${panel} relative flex flex-col w-full max-w-9/10 overflow-hidden`}
                         style={{ maxHeight: 'calc(100vh - 2rem)' }}
                         role="dialog"
                         aria-modal="true"
