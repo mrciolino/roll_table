@@ -8,7 +8,7 @@ import {
     type SpellCard,
     type SpellPool,
     type SpellRarity,
-} from './data/spells';
+} from './utils/spells';
 import { weightedPick } from './utils/roll';
 
 // ── Types ────────────────────────────────────────────────
@@ -26,6 +26,19 @@ type SelectedCard = {
     cardIndex: number;
 };
 
+type PackSettingKey = 'gold' | 'packPrice' | 'cardsInPack' | 'conjurationRate';
+
+type PackSettingConfig = {
+    key: PackSettingKey;
+    label: string;
+    value: number;
+    inputValue: string;
+    min: number;
+    max?: number;
+    step: number;
+    set: (value: number) => void;
+};
+
 // ── Constants ────────────────────────────────────────────
 const rarityOrder: SpellRarity[] = ['common', 'uncommon', 'rare', 'very_rare', 'legendary'];
 const schoolOrder = [
@@ -40,11 +53,11 @@ const row = 'flex justify-between gap-3 px-3 py-1.5 text-xs rounded-lg bg-white/
 const tag = 'px-2 py-0.5 rounded-full text-indigo-200 text-xs bg-indigo-500/15 border border-indigo-400/15';
 const shinyTag = 'px-2 py-0.5 rounded-full text-xs bg-gradient-to-r from-slate-300/40 to-slate-400/20 border border-slate-300/30 text-white';
 const rarityTagClasses: Record<SpellRarity, string> = {
-    common: 'text-slate-200 bg-slate-400/15 border-slate-300/20',
-    uncommon: 'text-emerald-200 bg-emerald-500/15 border-emerald-400/20',
-    rare: 'text-blue-200 bg-blue-500/15 border-blue-400/20',
-    very_rare: 'text-violet-200 bg-violet-500/15 border-violet-400/20',
-    legendary: 'text-amber-200 bg-amber-500/15 border-amber-400/25',
+    common: 'text-slate-200 bg-slate-800/15 border-slate-300/20',
+    uncommon: 'text-emerald-200 bg-emerald-800/15 border-emerald-400/20',
+    rare: 'text-cyan-200 bg-cyan-800/15 border-cyan-400/20',
+    very_rare: 'text-purple-200 bg-purple-800/15 border-purple-400/20',
+    legendary: 'text-amber-200 bg-amber-800/15 border-amber-400/25',
 };
 const inp = 'w-full border border-slate-600/50 rounded-lg py-1.5 px-2.5 text-slate-50 bg-slate-950/60 outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/40 transition-colors text-sm';
 const eyebrow = 'text-xs uppercase tracking-widest text-sky-400 m-0 mb-0.5 font-medium';
@@ -67,7 +80,12 @@ function generatePack(n: number, conjRate: number, weights: Record<SpellRarity, 
     const staple = spellCards.filter((c) => c.pool === 'staple');
     return Array.from({ length: n }, () => {
         const pool: SpellPool = Math.random() < conjRate ? 'conjuration' : 'staple';
-        const card = weightedPick(pool === 'conjuration' ? conj : staple, (e) => weights[e.rarity]);
+        const source = pool === 'conjuration' ? conj : staple;
+        const cards = source.length > 0 ? source : spellCards;
+        if (cards.length === 0) {
+            throw new Error('No spell cards are available to generate a pack.');
+        }
+        const card = weightedPick(cards, (e) => weights[e.rarity] ?? 0);
         return { card, pool, isShiny: Math.random() < 0.01 };
     });
 }
@@ -77,6 +95,20 @@ function countBy<T extends string>(values: T[]) {
         return acc;
     }, {} as Record<T, number>);
 }
+function hasCard(entry: GeneratedResult | null | undefined): entry is GeneratedResult {
+    return entry?.card != null;
+}
+
+function toWeightInputs(weights: Record<SpellRarity, number>) {
+    return Object.fromEntries(
+        rarityOrder.map((rarity) => [rarity, String(weights[rarity])]),
+    ) as Record<SpellRarity, string>;
+}
+function toPackSettingInputs(values: Record<PackSettingKey, number>) {
+    return Object.fromEntries(
+        Object.entries(values).map(([key, value]) => [key, String(value)]),
+    ) as Record<PackSettingKey, string>;
+}
 
 // ── Component ────────────────────────────────────────────
 export default function App() {
@@ -84,7 +116,14 @@ export default function App() {
     const [packPrice, setPackPrice] = useState(currencyPerPack);
     const [cardsInPack, setCardsInPack] = useState(cardsPerPack);
     const [conjurationRate, setConjurationRate] = useState(Math.round(conjurationChance * 100));
+    const [packSettingInputs, setPackSettingInputs] = useState<Record<PackSettingKey, string>>(() => toPackSettingInputs({
+        gold: 150,
+        packPrice: currencyPerPack,
+        cardsInPack: cardsPerPack,
+        conjurationRate: Math.round(conjurationChance * 100),
+    }));
     const [rarityWeights, setRarityWeights] = useState<Record<SpellRarity, number>>(defaultRarityWeights);
+    const [rarityWeightInputs, setRarityWeightInputs] = useState<Record<SpellRarity, string>>(() => toWeightInputs(defaultRarityWeights));
     const [packs, setPacks] = useState<GeneratedResult[][]>([]);
     const [lastOpenedAt, setLastOpenedAt] = useState<string | null>(null);
     const [selectedCard, setSelectedCard] = useState<SelectedCard | null>(null);
@@ -100,19 +139,25 @@ export default function App() {
         });
     }, []);
 
+    const visiblePacks = useMemo(
+        () => packs.map((pack) => pack.filter(hasCard)).filter((pack) => pack.length > 0),
+        [packs],
+    );
+
     // Navigate within the modal (dPack: pack delta, dCard: card delta)
     const navigate = useCallback((dPack: number, dCard: number) => {
         setSelectedCard((cur) => {
             if (!cur) return null;
-            const newPackIndex = Math.max(0, Math.min(packs.length - 1, cur.packIndex + dPack));
-            const newPack = packs[newPackIndex];
+            const newPackIndex = Math.max(0, Math.min(visiblePacks.length - 1, cur.packIndex + dPack));
+            const newPack = visiblePacks[newPackIndex];
             if (!newPack) return null;
             // When moving between packs, keep card index clamped; when navigating cards wrap within pack
             const newCardIndex = Math.max(0, Math.min(newPack.length - 1, cur.cardIndex + dCard));
             const entry = newPack[newCardIndex];
+            if (!entry) return null;
             return { card: entry.card, pool: entry.pool, isShiny: entry.isShiny, packIndex: newPackIndex, cardIndex: newCardIndex };
         });
-    }, [packs]);
+    }, [visiblePacks]);
 
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -136,7 +181,7 @@ export default function App() {
     const totalCards = packCount * cardsInPack;
 
     const stats = useMemo(() => {
-        const all = packs.flat();
+        const all = visiblePacks.flat();
         return {
             totalOpened: all.length,
             averageLevel: all.length ? (all.reduce((s, e) => s + e.card.level, 0) / all.length).toFixed(1) : '0.0',
@@ -145,17 +190,17 @@ export default function App() {
             pool: countBy(all.map((e) => e.pool)),
             schools: countBy(all.map((e) => e.card.school)),
         };
-    }, [packs]);
+    }, [visiblePacks]);
 
     const libStats = useMemo(() => {
         const c = spellCards.filter((c) => c.pool === 'conjuration').length;
         return { total: spellCards.length, conjuration: c, staple: spellCards.length - c };
     }, []);
-    const packSettings = [
-        { label: 'Gold budget', value: gold, min: 0, max: undefined, step: 5, set: (v: number) => setGold(Math.max(0, v)) },
-        { label: 'Gold per pack', value: packPrice, min: 1, max: undefined, step: 5, set: (v: number) => setPackPrice(Math.max(1, v)) },
-        { label: 'Cards per pack', value: cardsInPack, min: 1, max: 20, step: 1, set: (v: number) => setCardsInPack(Math.min(20, Math.max(1, v))) },
-        { label: 'Conjuration rate %', value: conjurationRate, min: 0, max: 100, step: 1, set: (v: number) => setConjurationRate(Math.min(100, Math.max(0, v))) },
+    const packSettings: PackSettingConfig[] = [
+        { key: 'gold', label: 'Gold budget', value: gold, inputValue: packSettingInputs.gold, min: 0, max: undefined, step: 5, set: (v: number) => setGold(Math.max(0, v)) },
+        { key: 'packPrice', label: 'Gold per pack', value: packPrice, inputValue: packSettingInputs.packPrice, min: 1, max: undefined, step: 5, set: (v: number) => setPackPrice(Math.max(1, v)) },
+        { key: 'cardsInPack', label: 'Cards per pack', value: cardsInPack, inputValue: packSettingInputs.cardsInPack, min: 1, max: 20, step: 1, set: (v: number) => setCardsInPack(Math.min(20, Math.max(1, v))) },
+        { key: 'conjurationRate', label: 'Conjuration rate %', value: conjurationRate, inputValue: packSettingInputs.conjurationRate, min: 0, max: 100, step: 1, set: (v: number) => setConjurationRate(Math.min(100, Math.max(0, v))) },
     ];
     const libraryInfo = [
         ['Available cards', libStats.total],
@@ -165,7 +210,7 @@ export default function App() {
         ['Cards this batch', totalCards],
     ] as const;
     const sessionStats = [
-        { label: 'Opened packs', value: packs.length },
+        { label: 'Opened packs', value: visiblePacks.length },
         { label: 'Opened cards', value: stats.totalOpened },
         { label: 'Conjuration pulls', value: stats.pool.conjuration ?? 0 },
         { label: 'Staple pulls', value: stats.pool.staple ?? 0 },
@@ -176,7 +221,51 @@ export default function App() {
     const rarityWeightSum = Object.values(rarityWeights).reduce((a, b) => a + b, 0);
 
     function setWeight(rarity: SpellRarity, value: number) {
-        setRarityWeights((cur) => ({ ...cur, [rarity]: Math.max(0, value) }));
+        const nextValue = Math.max(0, Math.trunc(value));
+        setRarityWeights((cur) => ({ ...cur, [rarity]: nextValue }));
+        setRarityWeightInputs((cur) => ({ ...cur, [rarity]: String(nextValue) }));
+    }
+    function handleWeightInputChange(rarity: SpellRarity, value: string) {
+        setRarityWeightInputs((cur) => ({ ...cur, [rarity]: value }));
+        if (value === '') return;
+
+        const nextValue = Number(value);
+        if (Number.isNaN(nextValue)) return;
+
+        setRarityWeights((cur) => ({ ...cur, [rarity]: Math.max(0, Math.trunc(nextValue)) }));
+    }
+    function handleWeightInputBlur(rarity: SpellRarity) {
+        const currentValue = rarityWeightInputs[rarity].trim();
+        setWeight(rarity, currentValue === '' ? 0 : Number(currentValue));
+    }
+    function setPackSetting(key: PackSettingKey, value: number) {
+        const config = packSettings.find((setting) => setting.key === key);
+        if (!config) return;
+
+        const nextValue = Math.trunc(value);
+        config.set(nextValue);
+
+        const normalizedValue =
+            key === 'gold' ? Math.max(0, nextValue)
+                : key === 'packPrice' ? Math.max(1, nextValue)
+                    : key === 'cardsInPack' ? Math.min(20, Math.max(1, nextValue))
+                        : Math.min(100, Math.max(0, nextValue));
+
+        setPackSettingInputs((cur) => ({ ...cur, [key]: String(normalizedValue) }));
+    }
+    function handlePackSettingInputChange(key: PackSettingKey, value: string) {
+        setPackSettingInputs((cur) => ({ ...cur, [key]: value }));
+        if (value === '') return;
+
+        const nextValue = Number(value);
+        if (Number.isNaN(nextValue)) return;
+
+        const config = packSettings.find((setting) => setting.key === key);
+        config?.set(Math.trunc(nextValue));
+    }
+    function handlePackSettingInputBlur(key: PackSettingKey) {
+        const currentValue = packSettingInputs[key].trim();
+        setPackSetting(key, currentValue === '' ? 0 : Number(currentValue));
     }
     function openPacks() {
         setPacks(Array.from({ length: packCount }, () =>
@@ -218,11 +307,11 @@ export default function App() {
     }
 
     // Derived modal nav state
-    const currentPack = selectedCard ? packs[selectedCard.packIndex] : null;
+    const currentPack = selectedCard ? visiblePacks[selectedCard.packIndex] : null;
     const canPrevCard = selectedCard != null && selectedCard.cardIndex > 0;
     const canNextCard = selectedCard != null && currentPack != null && selectedCard.cardIndex < currentPack.length - 1;
     const canPrevPack = selectedCard != null && selectedCard.packIndex > 0;
-    const canNextPack = selectedCard != null && selectedCard.packIndex < packs.length - 1;
+    const canNextPack = selectedCard != null && selectedCard.packIndex < visiblePacks.length - 1;
     const mobileSettingsPanel = (
         <div
             ref={mobileSettingsRef}
@@ -233,11 +322,11 @@ export default function App() {
             <div className="px-3 py-2 border-b border-slate-700/50 grid gap-2">
                 <p className={secTitle}>Pack settings</p>
                 <div className="grid grid-cols-2 gap-2">
-                    {packSettings.map(({ label, value, min, max, step, set }) => (
+                    {packSettings.map(({ key, label, inputValue, min, max, step }) => (
                         <label key={label} className="grid gap-0.5 p-1.5 rounded-xl bg-white/5 border border-slate-700/50">
                             <span className="text-[10px] uppercase tracking-wider text-indigo-300/80 font-medium leading-tight">{label}</span>
-                            <input type="number" inputMode="numeric" min={min} max={max} step={step} value={value}
-                                onChange={(e) => set(Number(e.target.value) || 0)} className={inp} />
+                            <input type="number" inputMode="numeric" min={min} max={max} step={step} value={inputValue}
+                                onChange={(e) => handlePackSettingInputChange(key, e.target.value)} onBlur={() => handlePackSettingInputBlur(key)} className={inp} />
                         </label>
                     ))}
                 </div>
@@ -246,14 +335,14 @@ export default function App() {
             <div className="px-3 py-2 border-b border-slate-700/50 grid gap-2">
                 <div className="flex items-center justify-between gap-2">
                     <p className={secTitle}>Rarity weights</p>
-                    {rarityWeightSum !== 100 && <span className="text-yellow-400/80 text-[10px] font-medium">Must add up to 100 (now {rarityWeightSum})</span>}
+                    {rarityWeightSum !== 100 && <span className="text-yellow-400/80 text-[10px] font-medium">Sum ≠ 100 (now {rarityWeightSum})</span>}
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                     {rarityOrder.map((rarity) => (
                         <label key={rarity} className="grid gap-0.5 p-1.5 rounded-xl bg-white/5 border border-slate-700/50">
                             <span className="text-[10px] uppercase tracking-wider text-indigo-300/80 font-medium capitalize leading-tight">{formatRarity(rarity)}</span>
-                            <input type="number" inputMode="numeric" min={0} step={1} value={rarityWeights[rarity]}
-                                onChange={(e) => setWeight(rarity, Number(e.target.value) || 0)} className={inp} />
+                            <input type="number" inputMode="numeric" min={0} step={1} value={rarityWeightInputs[rarity]}
+                                onChange={(e) => handleWeightInputChange(rarity, e.target.value)} onBlur={() => handleWeightInputBlur(rarity)} className={inp} />
                         </label>
                     ))}
                 </div>
@@ -278,17 +367,17 @@ export default function App() {
         <div className={`${panel} p-3 sm:p-4 w-full`}>
             <div className="flex items-center justify-between gap-2 mb-3">
                 <h2 className="text-base font-semibold text-slate-100 mt-0 mb-0">Spell cards</h2>
-                <span className={muted}>{packs.length} pack(s)</span>
+                <span className={muted}>{visiblePacks.length} pack(s)</span>
             </div>
 
-            {packs.length === 0 ? (
+            {visiblePacks.length === 0 ? (
                 <div className="border border-dashed border-slate-700/60 rounded-xl p-6 sm:p-8 text-center">
                     <p className="text-slate-300 font-medium mb-1">No packs opened yet.</p>
                     <span className="text-slate-500 text-sm">Configure the pack settings, then open it.</span>
                 </div>
             ) : (
                 <div className="grid gap-3">
-                    {packs.map((pack, packIndex) => {
+                    {visiblePacks.map((pack, packIndex) => {
                         const conjCount = pack.filter((e) => e.pool === 'conjuration').length;
                         return (
                             <article key={`${packIndex}-${pack.length}`}
@@ -414,11 +503,11 @@ export default function App() {
 
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
                             <p className={secTitle}>Pack settings</p>
-                            {packSettings.map(({ label, value, min, max, step, set }) => (
+                            {packSettings.map(({ key, label, inputValue, min, max, step }) => (
                                 <label key={label} className={field}>
                                     <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium">{label}</span>
-                                    <input type="number" min={min} max={max} step={step} value={value}
-                                        onChange={(e) => set(Number(e.target.value) || 0)} className={inp} />
+                                    <input type="number" min={min} max={max} step={step} value={inputValue}
+                                        onChange={(e) => handlePackSettingInputChange(key, e.target.value)} onBlur={() => handlePackSettingInputBlur(key)} className={inp} />
                                 </label>
                             ))}
                         </div>
@@ -426,14 +515,14 @@ export default function App() {
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
                             <div className="flex items-center justify-between gap-2">
                                 <p className={secTitle}>Rarity weights</p>
-                                {rarityWeightSum !== 100 && <span className="text-yellow-400/80 text-xs font-medium">Must add up to 100 (now {rarityWeightSum})</span>}
+                                {rarityWeightSum !== 100 && <span className="text-yellow-400/80 text-xs font-medium">Sum ≠ 100 (now {rarityWeightSum})</span>}
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 {rarityOrder.map((rarity) => (
                                     <label key={rarity} className={field}>
                                         <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium capitalize">{formatRarity(rarity)}</span>
-                                        <input type="number" min={0} step={1} value={rarityWeights[rarity]}
-                                            onChange={(e) => setWeight(rarity, Number(e.target.value) || 0)} className={inp} />
+                                        <input type="number" min={0} step={1} value={rarityWeightInputs[rarity]}
+                                            onChange={(e) => handleWeightInputChange(rarity, e.target.value)} onBlur={() => handleWeightInputBlur(rarity)} className={inp} />
                                     </label>
                                 ))}
                             </div>
@@ -541,7 +630,7 @@ export default function App() {
                     <div className="flex items-center gap-3">
                         <div className="grid flex-1 grid-cols-4 gap-2">
                             {[
-                                { label: 'Packs', value: packs.length },
+                                { label: 'Packs', value: visiblePacks.length },
                                 { label: 'Cards', value: stats.totalOpened },
                                 { label: 'Shiny', value: stats.shiny },
                                 { label: 'Avg', value: stats.averageLevel },
@@ -690,7 +779,7 @@ export default function App() {
                                     {/* Eyebrow */}
                                     <div>
                                         <p className={eyebrow}>
-                                            Pack {selectedCard.packIndex + 1} of {packs.length}
+                                            Pack {selectedCard.packIndex + 1} of {visiblePacks.length}
                                             {' · '}
                                             Card {selectedCard.cardIndex + 1} of {currentPack?.length ?? 0}
                                         </p>
@@ -724,7 +813,7 @@ export default function App() {
                                             return (
                                                 <div className="grid grid-cols-2 gap-1">
                                                     {[
-                                                        ['Pack', `${selectedCard.packIndex + 1} of ${packs.length}`],
+                                                        ['Pack', `${selectedCard.packIndex + 1} of ${visiblePacks.length}`],
                                                         ['Card in pack', `${selectedCard.cardIndex + 1} of ${currentPack.length}`],
                                                         ['Conjuration', conjCount],
                                                         ['Staple', currentPack.length - conjCount],

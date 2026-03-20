@@ -23,6 +23,10 @@ const schoolNames = new Set([
     'Transmutation',
 ]);
 
+const schoolAliases: Record<string, string> = {
+    Conjuratoin: 'Conjuration',
+};
+
 const levelFolders: Record<string, number> = {
     '0 - Cantrips': 0,
     '1st': 1,
@@ -45,14 +49,14 @@ const rarityForLevel = (level: number): SpellRarity => {
 };
 
 export const rarityWeights: Record<SpellRarity, number> = {
-    common: 42,
-    uncommon: 28,
-    rare: 18,
-    very_rare: 8,
-    legendary: 4,
+    common: 57,
+    uncommon: 32,
+    rare: 8,
+    very_rare: 2,
+    legendary: 1,
 };
 
-const imageModules = import.meta.glob('./Spells/**/*.png', {
+const imageModules = import.meta.glob('../data/Spells/**/*.png', {
     eager: true,
     import: 'default',
 }) as Record<string, string>;
@@ -61,30 +65,39 @@ function fileBaseName(path: string): string {
     return path.split('/').pop()?.replace(/\.png$/i, '') ?? path;
 }
 
+function normalizeSchool(value: string) {
+    const trimmed = value.trim();
+    return schoolAliases[trimmed] ?? trimmed;
+}
+
 function parseImageMeta(path: string, imageUrl: string): SpellCard | null {
     const parts = path.split('/');
-    const folder = parts[2];
+    const spellsFolderIndex = parts.lastIndexOf('Spells');
+    const folder = spellsFolderIndex >= 0 ? parts[spellsFolderIndex + 1] : undefined;
     if (!folder || folder === 'Back') {
         return null;
     }
 
-    const level = levelFolders[folder] ?? (Number.parseInt(folder, 10) || 0);
     const fileName = fileBaseName(path);
-    const withoutLevel = fileName.replace(new RegExp(`^${level}-`), '');
+    const levelMatch = fileName.match(/^(\d+)\s*-/);
+    const level = levelMatch
+        ? Number.parseInt(levelMatch[1], 10)
+        : (levelFolders[folder] ?? (Number.parseInt(folder, 10) || 0));
+    const withoutLevel = fileName.replace(/^\d+\s*-\s*/, '');
     const segments = withoutLevel.split('-');
 
     let school = 'Unknown';
     let namePart = withoutLevel;
 
     if (segments.length >= 2) {
-        const possibleSchool = segments[segments.length - 1].replace(/\d+$/, '');
+        const possibleSchool = normalizeSchool(segments[segments.length - 1].replace(/\d+$/, '').trim());
         if (schoolNames.has(possibleSchool)) {
             school = possibleSchool;
-            namePart = segments.slice(0, -1).join('-');
+            namePart = segments.slice(0, -1).join('-').trim();
         }
     }
 
-    const cleanedName = namePart.replace(/\d+$/, '').replace(/-/g, ' ').trim();
+    const cleanedName = namePart.replace(/\d+$/, '').replace(/\s*-\s*/g, ' ').trim();
 
     return {
         id: fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
