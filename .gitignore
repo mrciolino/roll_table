@@ -17,6 +17,7 @@ out/
 .env.*.local
 
 # IDE
+.github/
 .vscode/
 .idea/
 *.swp
