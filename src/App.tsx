@@ -39,6 +39,13 @@ const field = 'grid gap-1 p-2 rounded-xl bg-white/5 border border-slate-700/50';
 const row = 'flex justify-between gap-3 px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-slate-700/50';
 const tag = 'px-2 py-0.5 rounded-full text-indigo-200 text-xs bg-indigo-500/15 border border-indigo-400/15';
 const shinyTag = 'px-2 py-0.5 rounded-full text-xs bg-gradient-to-r from-slate-300/40 to-slate-400/20 border border-slate-300/30 text-white';
+const rarityTagClasses: Record<SpellRarity, string> = {
+    common: 'text-slate-200 bg-slate-400/15 border-slate-300/20',
+    uncommon: 'text-emerald-200 bg-emerald-500/15 border-emerald-400/20',
+    rare: 'text-blue-200 bg-blue-500/15 border-blue-400/20',
+    very_rare: 'text-violet-200 bg-violet-500/15 border-violet-400/20',
+    legendary: 'text-amber-200 bg-amber-500/15 border-amber-400/25',
+};
 const inp = 'w-full border border-slate-600/50 rounded-lg py-1.5 px-2.5 text-slate-50 bg-slate-950/60 outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/40 transition-colors text-sm';
 const eyebrow = 'text-xs uppercase tracking-widest text-sky-400 m-0 mb-0.5 font-medium';
 const secTitle = 'text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-0';
@@ -51,6 +58,9 @@ function formatPool(pool: SpellPool) {
 }
 function formatRarity(r: SpellCard['rarity']) {
     return r.replace('_', ' ');
+}
+function getRarityTagClass(rarity: SpellRarity) {
+    return rarityTagClasses[rarity];
 }
 function generatePack(n: number, conjRate: number, weights: Record<SpellRarity, number>): GeneratedResult[] {
     const conj = spellCards.filter((c) => c.pool === 'conjuration');
@@ -81,6 +91,14 @@ export default function App() {
     const [showMobileSettings, setShowMobileSettings] = useState(false);
     const [showMobileStats, setShowMobileStats] = useState(false);
     const touchStart = useRef<{ x: number; y: number } | null>(null);
+    const mobileSettingsRef = useRef<HTMLDivElement | null>(null);
+
+    const focusMobileSettingsPanel = useCallback(() => {
+        window.requestAnimationFrame(() => {
+            mobileSettingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            mobileSettingsRef.current?.focus({ preventScroll: true });
+        });
+    }, []);
 
     // Navigate within the modal (dPack: pack delta, dCard: card delta)
     const navigate = useCallback((dPack: number, dCard: number) => {
@@ -108,6 +126,11 @@ export default function App() {
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [selectedCard, navigate]);
+
+    useEffect(() => {
+        if (!showMobileSettings) return;
+        focusMobileSettingsPanel();
+    }, [showMobileSettings, focusMobileSettingsPanel]);
 
     const packCount = packPrice > 0 ? Math.max(0, Math.floor(gold / packPrice)) : 0;
     const totalCards = packCount * cardsInPack;
@@ -150,6 +173,8 @@ export default function App() {
         { label: 'Shiny pulls', value: stats.shiny },
     ] as const;
 
+    const rarityWeightSum = Object.values(rarityWeights).reduce((a, b) => a + b, 0);
+
     function setWeight(rarity: SpellRarity, value: number) {
         setRarityWeights((cur) => ({ ...cur, [rarity]: Math.max(0, value) }));
     }
@@ -165,6 +190,10 @@ export default function App() {
         setLastOpenedAt(null);
         setSelectedCard(null);
         setShowMobileStats(false);
+    }
+    function handleMobileSettingsClick() {
+        setShowMobileStats(false);
+        setShowMobileSettings((cur) => !cur);
     }
     function handleCardTouchStart(e: TouchEvent<HTMLDivElement>) {
         const touch = e.changedTouches.item(0);
@@ -195,101 +224,176 @@ export default function App() {
     const canPrevPack = selectedCard != null && selectedCard.packIndex > 0;
     const canNextPack = selectedCard != null && selectedCard.packIndex < packs.length - 1;
     const mobileSettingsPanel = (
-        <div className={`${panel} overflow-hidden xl:hidden`}>
-            <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
+        <div
+            ref={mobileSettingsRef}
+            id="mobile-settings-panel"
+            tabIndex={-1}
+            className={`${panel} overflow-hidden xl:hidden focus:outline-none focus:ring-2 focus:ring-indigo-500/50`}
+        >
+            <div className="px-3 py-2 border-b border-slate-700/50 grid gap-2">
                 <p className={secTitle}>Pack settings</p>
-                {packSettings.map(({ label, value, min, max, step, set }) => (
-                    <label key={label} className={field}>
-                        <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium">{label}</span>
-                        <input type="number" min={min} max={max} step={step} value={value}
-                            onChange={(e) => set(Number(e.target.value) || 0)} className={inp} />
-                    </label>
-                ))}
+                <div className="grid grid-cols-2 gap-2">
+                    {packSettings.map(({ label, value, min, max, step, set }) => (
+                        <label key={label} className="grid gap-0.5 p-1.5 rounded-xl bg-white/5 border border-slate-700/50">
+                            <span className="text-[10px] uppercase tracking-wider text-indigo-300/80 font-medium leading-tight">{label}</span>
+                            <input type="number" inputMode="numeric" min={min} max={max} step={step} value={value}
+                                onChange={(e) => set(Number(e.target.value) || 0)} className={inp} />
+                        </label>
+                    ))}
+                </div>
             </div>
 
-            <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
-                <p className={secTitle}>Rarity weights</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="px-3 py-2 border-b border-slate-700/50 grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                    <p className={secTitle}>Rarity weights</p>
+                    {rarityWeightSum !== 100 && <span className="text-yellow-400/80 text-[10px] font-medium">Must add up to 100 (now {rarityWeightSum})</span>}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
                     {rarityOrder.map((rarity) => (
-                        <label key={rarity} className={field}>
-                            <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium capitalize">{formatRarity(rarity)}</span>
-                            <input type="number" min={0} step={1} value={rarityWeights[rarity]}
+                        <label key={rarity} className="grid gap-0.5 p-1.5 rounded-xl bg-white/5 border border-slate-700/50">
+                            <span className="text-[10px] uppercase tracking-wider text-indigo-300/80 font-medium capitalize leading-tight">{formatRarity(rarity)}</span>
+                            <input type="number" inputMode="numeric" min={0} step={1} value={rarityWeights[rarity]}
                                 onChange={(e) => setWeight(rarity, Number(e.target.value) || 0)} className={inp} />
                         </label>
                     ))}
                 </div>
             </div>
 
-            <div className="px-4 py-3 grid gap-2.5">
+            <div className="px-3 py-2 grid gap-1.5">
                 <p className={secTitle}>Information</p>
-                <ul className="list-none p-0 m-0 grid gap-1.5">
+                <div className="grid grid-cols-2 gap-1">
                     {libraryInfo.map(([label, val]) => (
-                        <li key={String(label)} className={row}>
-                            <span className="text-slate-300">{label}</span>
-                            <strong className="text-slate-100">{val}</strong>
-                        </li>
+                        <div key={String(label)} className="flex justify-between gap-1 px-2 py-1 text-xs rounded-lg bg-white/5 border border-slate-700/50">
+                            <span className="text-slate-300 truncate">{label}</span>
+                            <strong className="text-slate-100 shrink-0">{val}</strong>
+                        </div>
                     ))}
-                </ul>
+                </div>
             </div>
         </div>
     );
 
+    // ── Shared card grid (used on both mobile scroll zone and XL center) ──
+    const cardGrid = (
+        <div className={`${panel} p-3 sm:p-4 w-full`}>
+            <div className="flex items-center justify-between gap-2 mb-3">
+                <h2 className="text-base font-semibold text-slate-100 mt-0 mb-0">Spell cards</h2>
+                <span className={muted}>{packs.length} pack(s)</span>
+            </div>
+
+            {packs.length === 0 ? (
+                <div className="border border-dashed border-slate-700/60 rounded-xl p-6 sm:p-8 text-center">
+                    <p className="text-slate-300 font-medium mb-1">No packs opened yet.</p>
+                    <span className="text-slate-500 text-sm">Configure the pack settings, then open it.</span>
+                </div>
+            ) : (
+                <div className="grid gap-3">
+                    {packs.map((pack, packIndex) => {
+                        const conjCount = pack.filter((e) => e.pool === 'conjuration').length;
+                        return (
+                            <article key={`${packIndex}-${pack.length}`}
+                                className="rounded-xl p-3 bg-slate-950/50 border border-slate-700/40">
+                                <header className="flex items-baseline justify-between gap-2 mb-3">
+                                    <h3 className="text-sm font-semibold text-slate-100 mt-0 mb-0 shrink-0">Pack {packIndex + 1}</h3>
+                                    <p className="text-slate-500 text-xs m-0 text-right">{conjCount} conjuration · {pack.length - conjCount} staple · {pack.length} cards</p>
+                                </header>
+
+                                <ol className="list-none p-0 m-0 grid gap-2 grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+                                    {pack.map((entry, cardIndex) => (
+                                        <li
+                                            key={`${entry.card.id}-${cardIndex}`}
+                                            onClick={() => setSelectedCard({ card: entry.card, pool: entry.pool, isShiny: entry.isShiny, packIndex, cardIndex })}
+                                            className="p-2.5 rounded-xl bg-white/4 border border-slate-700/40 hover:bg-white/8 transition-colors cursor-zoom-in"
+                                        >
+                                            <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-3 items-center relative sm:grid-cols-[6rem_minmax(0,1fr)]${entry.isShiny ? ' shiny-card' : ''}`}>
+                                                <img
+                                                    src={entry.card.imageUrl}
+                                                    alt={entry.card.fileName}
+                                                    loading="lazy"
+                                                    className="w-20 h-28 object-contain rounded-lg border border-slate-700/40 bg-slate-950/80 sm:w-24 sm:h-32"
+                                                />
+                                                <div className="min-w-0">
+                                                    <div className="font-semibold text-sm leading-tight text-slate-100 mb-0.5">{entry.card.displayName}</div>
+                                                    <div className="text-xs text-slate-500 mb-2 break-words">{entry.card.fileName}.png</div>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {entry.isShiny && <span className={shinyTag}>Shiny</span>}
+                                                        <span className={tag}>{entry.card.school}</span>
+                                                        <span className={tag}>Level {entry.card.level}</span>
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs border ${getRarityTagClass(entry.card.rarity)}`}>{formatRarity(entry.card.rarity)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </article>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+
     return (
-        <main className="h-screen overflow-y-auto xl:overflow-hidden">
-            <div className="sticky top-0 z-10 px-2 pt-2 pb-3 xl:hidden bg-gradient-to-b from-slate-950 via-slate-950/95 to-transparent">
-                <div className={`${panel} p-3`}>
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+        <main className="flex flex-col h-dvh xl:block xl:overflow-hidden">
+
+            {/* ══ MOBILE TOP BAR (compact, non-scrolling) ══════════════ */}
+            <div className="xl:hidden shrink-0 border-b border-slate-700/40 bg-slate-950/95 px-2 pt-2 pb-2 z-10">
+                <div className={`${panel} px-3 py-2`}>
+                    <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
                             <p className={eyebrow}>5e Scroll Pack Opener</p>
-                            <div className="text-base font-semibold text-slate-50">Quick controls</div>
-                            <p className="text-xs text-slate-400 mt-1 mb-0">{packCount} pack(s) ready · {totalCards} cards in this batch</p>
+                            <p className="text-xs text-slate-400 mt-0.5 mb-0 leading-none">{packCount} pack{packCount !== 1 ? 's' : ''} ready · {totalCards} cards</p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => setShowMobileSettings((cur) => !cur)}
-                            className="shrink-0 rounded-xl px-3 py-2 bg-white/8 text-slate-200 text-sm font-medium transition-all hover:bg-white/12 border border-slate-700/50"
-                        >
-                            {showMobileSettings ? 'Hide controls' : 'Controls'}
-                        </button>
-                    </div>
-                    <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                         <button
                             type="button"
                             onClick={openPacks}
                             disabled={packCount === 0 || cardsInPack <= 0}
-                            className="rounded-xl px-4 py-3 bg-gradient-to-br from-violet-500 to-blue-500 text-white text-base font-semibold shadow-lg transition-all hover:-translate-y-px hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0 disabled:brightness-100 border-0"
+                            className="shrink-0 rounded-xl px-3 py-2 bg-gradient-to-br from-violet-500 to-blue-500 text-white text-sm font-semibold shadow disabled:opacity-40 disabled:cursor-not-allowed border-0 transition-all"
                         >
-                            Open {packCount} pack{packCount !== 1 ? 's' : ''}
+                            Open {packCount}
                         </button>
                         <button
                             type="button"
                             onClick={clearResults}
-                            className="rounded-xl px-4 py-2 bg-white/8 text-slate-200 text-sm font-medium transition-all hover:-translate-y-px hover:bg-white/12 border border-slate-700/50"
+                            className="shrink-0 rounded-xl px-2.5 py-2 bg-white/8 text-slate-200 text-sm font-medium border border-slate-700/50 transition-all hover:bg-white/12"
                         >
                             Clear
                         </button>
+                        <button
+                            type="button"
+                            onClick={handleMobileSettingsClick}
+                            aria-label="Toggle controls"
+                            aria-controls="mobile-settings-panel"
+                            aria-expanded={showMobileSettings}
+                            className={`shrink-0 rounded-xl px-2.5 py-2 text-sm font-medium transition-all border ${showMobileSettings ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40' : 'bg-white/8 text-slate-200 border-slate-700/50 hover:bg-white/12'}`}
+                        >
+                            ⚙
+                        </button>
                     </div>
-                    {lastOpenedAt && <p className="text-xs text-slate-500 mt-2 mb-0">Last batch: {lastOpenedAt}</p>}
+                    {lastOpenedAt && <p className="text-xs text-slate-500 mt-1.5 mb-0 leading-none">Last: {lastOpenedAt}</p>}
                 </div>
-                {showMobileSettings && <div className="mt-3">{mobileSettingsPanel}</div>}
             </div>
 
-            {/* ── Centered max-width shell ── */}
-            <section className="grid min-h-full max-w-screen-3xl mx-auto gap-3 px-2 py-3 md:grid-cols-2 xl:h-full xl:grid-cols-[18rem_minmax(0,1fr)_14rem] xl:px-1 xl:py-0">
+            {/* ══ MOBILE SCROLLABLE ZONE ═══════════════════════════════ */}
+            <div className="xl:hidden flex-1 min-h-0 overflow-y-auto px-2 py-3 pb-28">
+                {showMobileSettings && <div className="mb-3">{mobileSettingsPanel}</div>}
+                {cardGrid}
+            </div>
 
-                {/* ══ LEFT RAIL ════════════════════════════ */}
-                {/* Vertically centered, fixed width, scrollable if content overflows */}
-                <aside className="hidden min-w-0 xl:flex xl:flex-col xl:overflow-y-auto xl:py-4">
+            {/* ══ XL THREE-COLUMN LAYOUT ═══════════════════════════════ */}
+            <section className="hidden xl:grid xl:h-full max-w-screen-3xl mx-auto gap-3 xl:grid-cols-[18rem_minmax(0,1fr)_14rem] xl:px-1 xl:py-0">
+
+                {/* ── LEFT RAIL ── */}
+                <aside className="min-w-0 flex flex-col overflow-y-auto py-4">
                     <div className={`${panel} grid gap-0 p-0 overflow-hidden`}>
 
-                        {/* Brand header */}
                         <div className="px-4 pt-4 pb-3 border-b border-slate-700/50">
                             <p className={eyebrow}>5e Scroll Pack Opener</p>
                             <h1 className="text-xl sm:text-2xl font-bold leading-tight mt-1 mb-1 text-slate-50">Pack controls</h1>
                             <p className={`${muted} leading-snug`}>Configure values, then open a batch on the right.</p>
                         </div>
 
-                        {/* ── Action buttons ── moved to top */}
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2">
                             <button
                                 type="button"
@@ -308,7 +412,6 @@ export default function App() {
                             </button>
                         </div>
 
-                        {/* Pack settings */}
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
                             <p className={secTitle}>Pack settings</p>
                             {packSettings.map(({ label, value, min, max, step, set }) => (
@@ -320,10 +423,12 @@ export default function App() {
                             ))}
                         </div>
 
-                        {/* Rarity weights */}
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
-                            <p className={secTitle}>Rarity weights</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <p className={secTitle}>Rarity weights</p>
+                                {rarityWeightSum !== 100 && <span className="text-yellow-400/80 text-xs font-medium">Must add up to 100 (now {rarityWeightSum})</span>}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
                                 {rarityOrder.map((rarity) => (
                                     <label key={rarity} className={field}>
                                         <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium capitalize">{formatRarity(rarity)}</span>
@@ -334,7 +439,6 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* Info stats */}
                         <div className="px-4 py-3 grid gap-2.5">
                             <p className={secTitle}>Information</p>
                             <ul className="list-none p-0 m-0 grid gap-1.5">
@@ -349,78 +453,16 @@ export default function App() {
                     </div>
                 </aside>
 
-                {/* ══ CENTER: scrollable spell cards ════════════════════ */}
-                <section className="min-w-0 px-0 pb-24 md:col-span-2 xl:col-span-1 xl:overflow-y-auto xl:py-4 xl:px-3 xl:pb-4">
+                {/* ── CENTER ── */}
+                <section className="min-w-0 overflow-y-auto py-4 px-3">
                     <div className="grid gap-3">
-
-                        {/* Spell cards panel */}
-                        <div className={`${panel} p-3 sm:p-4 w-full`}>
-                            <div className="flex flex-col items-start justify-between gap-1.5 mb-3 sm:flex-row sm:items-center sm:gap-2">
-                                <h2 className="text-base font-semibold text-slate-100 mt-0 mb-0">Spell cards</h2>
-                                <span className={muted}>{packs.length} pack(s)</span>
-                            </div>
-
-                            {packs.length === 0 ? (
-                                <div className="border border-dashed border-slate-700/60 rounded-xl p-6 sm:p-8 text-center">
-                                    <p className="text-slate-300 font-medium mb-1">No packs opened yet.</p>
-                                    <span className="text-slate-500 text-sm">Use the Controls bar to tune the pack, then open it here.</span>
-                                </div>
-                            ) : (
-                                <div className="grid gap-3">
-                                    {packs.map((pack, packIndex) => {
-                                        const conjCount = pack.filter((e) => e.pool === 'conjuration').length;
-                                        return (
-                                            <article key={`${packIndex}-${pack.length}`}
-                                                className="rounded-xl p-3 bg-slate-950/50 border border-slate-700/40">
-                                                <header className="flex flex-col justify-between items-start gap-1.5 mb-3 sm:flex-row sm:items-start sm:gap-2">
-                                                    <div>
-                                                        <h3 className="text-sm font-semibold text-slate-100 mt-0 mb-0.5">Pack {packIndex + 1}</h3>
-                                                        <p className="text-slate-500 text-xs m-0">{conjCount} conjuration · {pack.length - conjCount} staple</p>
-                                                    </div>
-                                                    <span className="text-xs text-slate-500 shrink-0">{pack.length} cards</span>
-                                                </header>
-
-                                                <ol className="list-none p-0 m-0 grid gap-2 grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
-                                                    {pack.map((entry, cardIndex) => (
-                                                        <li
-                                                            key={`${entry.card.id}-${cardIndex}`}
-                                                            onClick={() => setSelectedCard({ card: entry.card, pool: entry.pool, isShiny: entry.isShiny, packIndex, cardIndex })}
-                                                            className="p-2.5 rounded-xl bg-white/4 border border-slate-700/40 hover:bg-white/8 transition-colors cursor-zoom-in"
-                                                        >
-                                                            <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-3 items-center relative sm:grid-cols-[6rem_minmax(0,1fr)]${entry.isShiny ? ' shiny-card' : ''}`}>
-                                                                <img
-                                                                    src={entry.card.imageUrl}
-                                                                    alt={entry.card.fileName}
-                                                                    loading="lazy"
-                                                                    className="w-20 h-28 object-contain rounded-lg border border-slate-700/40 bg-slate-950/80 sm:w-24 sm:h-32"
-                                                                />
-                                                                <div className="min-w-0">
-                                                                    <div className="font-semibold text-sm leading-tight text-slate-100 mb-0.5">{entry.card.displayName}</div>
-                                                                    <div className="text-xs text-slate-500 mb-2 break-words">{entry.card.fileName}.png</div>
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {entry.isShiny && <span className={shinyTag}>Shiny</span>}
-                                                                        <span className={tag}>{entry.card.school}</span>
-                                                                        <span className={tag}>Level {entry.card.level}</span>
-                                                                        <span className={tag}>{formatRarity(entry.card.rarity)}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </li>
-                                                    ))}
-                                                </ol>
-                                            </article>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
+                        {cardGrid}
                     </div>
                 </section>
 
-                {/* ══ RIGHT RAIL: stats + analysis (vertically centered) ═ */}
-                <aside className="hidden min-w-0 xl:grid xl:gap-3 xl:grid-cols-1 xl:col-span-1 xl:overflow-y-auto xl:py-4">
+                {/* ── RIGHT RAIL ── */}
+                <aside className="min-w-0 grid gap-3 grid-cols-1 overflow-y-auto py-4 content-start">
 
-                    {/* Session stats panel */}
                     <section className={`${panel} p-4`}>
                         <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-3">Session stats</h2>
                         <div className="grid gap-2">
@@ -433,7 +475,6 @@ export default function App() {
                         </div>
                     </section>
 
-                    {/* Rarity breakdown */}
                     <section className={`${panel} p-4`}>
                         <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-2.5">Rarity</h2>
                         <ul className="list-none p-0 m-0 grid gap-1.5">
@@ -446,7 +487,6 @@ export default function App() {
                         </ul>
                     </section>
 
-                    {/* Schools breakdown */}
                     <section className={`${panel} p-4`}>
                         <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-2.5">Schools</h2>
                         <ul className="list-none p-0 m-0 grid gap-1.5">
@@ -462,13 +502,14 @@ export default function App() {
                 </aside>
             </section>
 
+            {/* ══ MOBILE BOTTOM STATS BAR ══════════════════════════════ */}
             <div className="xl:hidden fixed inset-x-2 bottom-2 z-10">
                 {showMobileStats && (
-                    <div className={`${panel} mb-2 p-3`}>
+                    <div className={`${panel} mb-2 p-3 max-h-[55vh] overflow-y-auto`}>
                         <div className="grid gap-3 sm:grid-cols-3">
                             <section className="grid gap-2">
                                 <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-0">Session stats</h2>
-                                {sessionStats.slice(0, 4).map(({ label, value }) => (
+                                {sessionStats.map(({ label, value }) => (
                                     <div key={label} className="flex justify-between gap-2 text-xs rounded-lg bg-white/5 border border-slate-700/50 px-3 py-2">
                                         <span className="text-slate-300">{label}</span>
                                         <strong className="text-slate-100">{value}</strong>
@@ -486,7 +527,7 @@ export default function App() {
                             </section>
                             <section className="grid gap-2">
                                 <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-0">Schools</h2>
-                                {schoolOrder.slice(0, 5).map((school) => (
+                                {schoolOrder.map((school) => (
                                     <div key={school} className="flex justify-between gap-2 text-xs rounded-lg bg-white/5 border border-slate-700/50 px-3 py-2">
                                         <span className="text-slate-300">{school}</span>
                                         <strong className="text-slate-100">{stats.schools[school] ?? 0}</strong>
@@ -514,9 +555,9 @@ export default function App() {
                         <button
                             type="button"
                             onClick={() => setShowMobileStats((cur) => !cur)}
-                            className="shrink-0 rounded-xl px-3 py-2 bg-white/8 text-slate-200 text-sm font-medium transition-all hover:bg-white/12 border border-slate-700/50"
+                            className={`shrink-0 rounded-xl px-3 py-2 text-sm font-medium transition-all border ${showMobileStats ? 'bg-indigo-500/20 text-indigo-200 border-indigo-500/40' : 'bg-white/8 text-slate-200 border-slate-700/50 hover:bg-white/12'}`}
                         >
-                            {showMobileStats ? 'Hide' : 'Stats'}
+                            Stats
                         </button>
                     </div>
                 </div>
@@ -525,64 +566,47 @@ export default function App() {
             {/* ══ MODAL LIGHTBOX ═══════════════════════════ */}
             {selectedCard && (
                 <div
-                    className="fixed inset-0 bg-slate-950/92 backdrop-blur-md flex items-center justify-center p-4 z-20"
+                    className="fixed inset-0 bg-slate-950/92 backdrop-blur-md flex items-center justify-center p-1 sm:p-4 z-20"
                     onClick={() => setSelectedCard(null)}
                     role="presentation"
                 >
                     <div
                         className={`${panel} relative flex flex-col w-full max-w-9/10 overflow-hidden`}
-                        style={{ maxHeight: 'calc(100vh - 2rem)' }}
+                        style={{ maxHeight: 'calc(100dvh - 0.5rem)' }}
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="modal-title"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* ── Header bar ── */}
-                        <div className="flex flex-wrap items-start justify-between gap-3 px-3 py-3 sm:px-5 border-b border-slate-700/60 shrink-0">
-                            {/* Pack navigation */}
-                            <div className="flex items-center gap-2 order-1">
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(-1, 0)}
-                                    disabled={!canPrevPack}
-                                    aria-label="Previous pack"
-                                    className="w-7 h-7 rounded-lg grid place-items-center bg-white/8 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-white/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm border-0"
-                                >
-                                    ↑
-                                </button>
+                        <div className="flex items-center justify-between gap-3 px-3 py-2 sm:py-3 sm:px-5 border-b border-slate-700/60 shrink-0">
+                            {/* Spacer to balance close button */}
+                            <div className="w-8 shrink-0" />
+
+                            {/* Centre: position + keyboard hint */}
+                            <div className="flex flex-col items-center gap-0.5 sm:gap-1 flex-1 text-center">
                                 <span className="text-sm font-medium text-slate-200">
                                     Pack <span className="text-white font-bold">{selectedCard.packIndex + 1}</span>
+                                    <span className="text-slate-500 mx-2">·</span>
+                                    Card <span className="text-white font-bold">{selectedCard.cardIndex + 1}</span>
                                     <span className="text-slate-500 mx-1">/</span>
-                                    <span className="text-slate-400">{packs.length}</span>
+                                    <span className="text-slate-400">{currentPack?.length ?? 0}</span>
                                 </span>
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(1, 0)}
-                                    disabled={!canNextPack}
-                                    aria-label="Next pack"
-                                    className="w-7 h-7 rounded-lg grid place-items-center bg-white/8 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-white/15 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm border-0"
-                                >
-                                    ↓
-                                </button>
+                                <span className="hidden sm:block text-xs text-slate-500">
+                                    use{' '}<kbd className="px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">←</kbd>
+                                    <kbd className="ml-0.5 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">→</kbd>
+                                    <kbd className="ml-0.5 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">↑</kbd>
+                                    <kbd className="ml-0.5 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">↓</kbd>
+                                    {' '}to navigate
+                                </span>
                             </div>
-
-                            {/* Card counter */}
-                            <span className="text-xs text-slate-500 order-3 basis-full sm:order-2 sm:basis-auto">
-                                Card <span className="text-slate-300 font-semibold">{selectedCard.cardIndex + 1}</span>
-                                {' '}of <span className="text-slate-300 font-semibold">{currentPack?.length ?? 0}</span>
-                                {' '}·{' '}use <kbd className="px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">←</kbd>
-                                <kbd className="ml-0.5 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">→</kbd>
-                                <kbd className="ml-0.5 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">↑</kbd>
-                                <kbd className="ml-0.5 px-1 py-0.5 rounded bg-slate-800 border border-slate-700 text-xs font-mono">↓</kbd>
-                                {' '}to navigate
-                            </span>
 
                             {/* Close */}
                             <button
                                 type="button"
                                 onClick={() => setSelectedCard(null)}
                                 aria-label="Close"
-                                className="w-8 h-8 rounded-xl grid place-items-center bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 text-lg p-0 transition-all hover:bg-slate-700/60 cursor-pointer order-2 sm:order-3"
+                                className="w-8 h-8 shrink-0 rounded-xl grid place-items-center bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 text-lg p-0 transition-all hover:bg-slate-700/60 cursor-pointer"
                             >
                                 ×
                             </button>
@@ -591,53 +615,78 @@ export default function App() {
                         {/* ── Body ── */}
                         <div className="flex flex-col sm:flex-row gap-0 overflow-hidden flex-1 min-h-0">
 
-                            {/* Image area: [‹] [image] [›] as flex columns */}
+                            {/* Image area: [↑] / [‹][image][›] / [↓] as flex rows+columns */}
                             <div
-                                className="flex items-stretch sm:w-3/5 min-h-[16rem] sm:min-h-0 bg-slate-950/60 touch-pan-y"
+                                className="flex flex-col flex-[3] min-h-0 sm:flex-none sm:w-3/5 bg-slate-950/60 touch-pan-y"
                                 onTouchStart={handleCardTouchStart}
                                 onTouchEnd={handleCardTouchEnd}
                                 onTouchCancel={() => { touchStart.current = null; }}
                             >
 
-                                {/* Prev card button — left column */}
+                                {/* Prev pack button — top row */}
                                 <button
                                     type="button"
-                                    onClick={() => navigate(0, -1)}
-                                    disabled={!canPrevCard}
-                                    aria-label="Previous card"
-                                    className="w-12 sm:w-14 shrink-0 flex items-center justify-center border-r border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                    onClick={() => navigate(-1, 0)}
+                                    disabled={!canPrevPack}
+                                    aria-label="Previous pack"
+                                    className="h-7 shrink-0 flex items-center justify-center border-b border-slate-700/50 text-base sm:text-lg font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                                 >
-                                    ‹
+                                    ↑
                                 </button>
 
-                                {/* Image — centre column */}
-                                <div className="relative flex-1 flex items-center justify-center overflow-hidden p-3">
-                                    {selectedCard.isShiny && (
-                                        <div className="shiny-card absolute inset-0 pointer-events-none" />
-                                    )}
-                                    <img
-                                        src={selectedCard.card.imageUrl}
-                                        alt={selectedCard.card.displayName}
-                                        className="object-contain max-w-full max-h-full"
-                                        style={{ maxHeight: 'calc(100vh - 14rem)' }}
-                                    />
+                                {/* Middle row: [‹] [image] [›] */}
+                                <div className="flex items-stretch flex-1 min-h-0">
+
+                                    {/* Prev card button — left column */}
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(0, -1)}
+                                        disabled={!canPrevCard}
+                                        aria-label="Previous card"
+                                        className="w-8 shrink-0 flex items-center justify-center border-r border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                    >
+                                        ‹
+                                    </button>
+
+                                    {/* Image — centre column */}
+                                    <div className="relative flex-1 flex items-center justify-center overflow-hidden p-1 sm:p-3">
+                                        {selectedCard.isShiny && (
+                                            <div className="shiny-card absolute inset-0 pointer-events-none" />
+                                        )}
+                                        <img
+                                            src={selectedCard.card.imageUrl}
+                                            alt={selectedCard.card.displayName}
+                                            className="object-contain max-w-full max-h-full"
+                                        />
+                                    </div>
+
+                                    {/* Next card button — right column */}
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(0, 1)}
+                                        disabled={!canNextCard}
+                                        aria-label="Next card"
+                                        className="w-8 shrink-0 flex items-center justify-center border-l border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                    >
+                                        ›
+                                    </button>
                                 </div>
 
-                                {/* Next card button — right column */}
+                                {/* Next pack button — bottom row */}
                                 <button
                                     type="button"
-                                    onClick={() => navigate(0, 1)}
-                                    disabled={!canNextCard}
-                                    aria-label="Next card"
-                                    className="w-12 sm:w-14 shrink-0 flex items-center justify-center border-l border-slate-700/50 text-2xl font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                    onClick={() => navigate(1, 0)}
+                                    disabled={!canNextPack}
+                                    aria-label="Next pack"
+                                    className="h-7 shrink-0 flex items-center justify-center border-t border-slate-700/50 text-base sm:text-lg font-bold text-slate-400 hover:text-white hover:bg-white/6 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
                                 >
-                                    ›
+                                    ↓
                                 </button>
                             </div>
 
                             {/* Metadata panel */}
-                            <div className="sm:w-2/5 border-t sm:border-t-0 sm:border-l border-slate-700/60 flex flex-col overflow-y-auto">
-                                <div className="p-4 sm:p-6 flex flex-col gap-4 flex-1">
+                            <div className="flex-[2] min-h-0 sm:flex-none sm:w-2/5 border-t sm:border-t-0 sm:border-l border-slate-700/60 flex flex-col overflow-y-auto">
+                                <div className="p-3 sm:p-5 flex flex-col gap-2.5 sm:gap-4 flex-1">
                                     {/* Eyebrow */}
                                     <div>
                                         <p className={eyebrow}>
@@ -656,53 +705,47 @@ export default function App() {
                                     {/* Tags */}
                                     <div className="flex flex-wrap gap-2">
                                         {selectedCard.isShiny && <span className={shinyTag}>✦ Shiny</span>}
-                                        {[
-                                            selectedCard.card.school,
-                                            `Level ${selectedCard.card.level}`,
-                                            formatRarity(selectedCard.card.rarity),
-                                            formatPool(selectedCard.pool),
-                                        ].map((item, index) => (
-                                            <span key={`${item}-${index}`} className="px-3 py-1 rounded-lg text-sm text-slate-300 bg-white/5 border border-slate-700/50">
-                                                {item}
-                                            </span>
-                                        ))}
+                                        <span className="px-3 py-1 rounded-lg text-sm text-slate-300 bg-white/5 border border-slate-700/50">
+                                            {selectedCard.card.school}
+                                        </span>
+                                        <span className="px-3 py-1 rounded-lg text-sm text-slate-300 bg-white/5 border border-slate-700/50">
+                                            Level {selectedCard.card.level}
+                                        </span>
+                                        <span className={`px-3 py-1 rounded-lg text-sm border ${getRarityTagClass(selectedCard.card.rarity)}`}>
+                                            {formatRarity(selectedCard.card.rarity)}
+                                        </span>
                                     </div>
 
                                     {/* Pack context */}
-                                    <div className={`${row} flex-col gap-2 rounded-xl p-3`} style={{ display: 'grid' }}>
+                                    <div className="grid gap-1 rounded-xl p-3 bg-white/5 border border-slate-700/50">
                                         <p className={`${secTitle} mb-1`}>Pack context</p>
                                         {currentPack && (() => {
                                             const conjCount = currentPack.filter((e) => e.pool === 'conjuration').length;
                                             return (
-                                                <>
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-slate-400">Pack</span>
-                                                        <strong className="text-slate-200">{selectedCard.packIndex + 1} of {packs.length}</strong>
-                                                    </div>
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-slate-400">Card in pack</span>
-                                                        <strong className="text-slate-200">{selectedCard.cardIndex + 1} of {currentPack.length}</strong>
-                                                    </div>
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-slate-400">Conjuration</span>
-                                                        <strong className="text-slate-200">{conjCount}</strong>
-                                                    </div>
-                                                    <div className="flex justify-between text-xs">
-                                                        <span className="text-slate-400">Staple</span>
-                                                        <strong className="text-slate-200">{currentPack.length - conjCount}</strong>
-                                                    </div>
-                                                </>
+                                                <div className="grid grid-cols-2 gap-1">
+                                                    {[
+                                                        ['Pack', `${selectedCard.packIndex + 1} of ${packs.length}`],
+                                                        ['Card in pack', `${selectedCard.cardIndex + 1} of ${currentPack.length}`],
+                                                        ['Conjuration', conjCount],
+                                                        ['Staple', currentPack.length - conjCount],
+                                                    ].map(([label, value]) => (
+                                                        <div key={String(label)} className="grid gap-0.5 p-1 rounded-lg bg-white/4 text-xs">
+                                                            <span className="text-slate-400 leading-none">{label}</span>
+                                                            <strong className="text-slate-200 leading-tight">{value}</strong>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             );
                                         })()}
                                     </div>
 
                                     {/* Card navigation buttons */}
-                                    <div className="flex flex-col sm:flex-row gap-2 mt-auto pt-2">
+                                    <div className="hidden sm:grid grid-cols-2 gap-2 mt-auto pt-2">
                                         <button
                                             type="button"
                                             onClick={() => navigate(0, -1)}
                                             disabled={!canPrevCard}
-                                            className="flex-1 rounded-xl py-2.5 bg-white/8 border border-slate-700/50 text-slate-200 text-sm font-medium hover:bg-white/12 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                            className="rounded-xl py-2.5 bg-white/8 border border-slate-700/50 text-slate-200 text-sm font-medium hover:bg-white/12 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                         >
                                             ‹ Prev card
                                         </button>
@@ -710,7 +753,7 @@ export default function App() {
                                             type="button"
                                             onClick={() => navigate(0, 1)}
                                             disabled={!canNextCard}
-                                            className="flex-1 rounded-xl py-2.5 bg-white/8 border border-slate-700/50 text-slate-200 text-sm font-medium hover:bg-white/12 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                            className="rounded-xl py-2.5 bg-white/8 border border-slate-700/50 text-slate-200 text-sm font-medium hover:bg-white/12 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                         >
                                             Next card ›
                                         </button>
