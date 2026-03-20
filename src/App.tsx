@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import {
     cardsPerPack,
     conjurationChance,
@@ -78,6 +78,9 @@ export default function App() {
     const [packs, setPacks] = useState<GeneratedResult[][]>([]);
     const [lastOpenedAt, setLastOpenedAt] = useState<string | null>(null);
     const [selectedCard, setSelectedCard] = useState<SelectedCard | null>(null);
+    const [showMobileSettings, setShowMobileSettings] = useState(false);
+    const [showMobileStats, setShowMobileStats] = useState(false);
+    const touchStart = useRef<{ x: number; y: number } | null>(null);
 
     // Navigate within the modal (dPack: pack delta, dCard: card delta)
     const navigate = useCallback((dPack: number, dCard: number) => {
@@ -125,6 +128,27 @@ export default function App() {
         const c = spellCards.filter((c) => c.pool === 'conjuration').length;
         return { total: spellCards.length, conjuration: c, staple: spellCards.length - c };
     }, []);
+    const packSettings = [
+        { label: 'Gold budget', value: gold, min: 0, max: undefined, step: 5, set: (v: number) => setGold(Math.max(0, v)) },
+        { label: 'Gold per pack', value: packPrice, min: 1, max: undefined, step: 5, set: (v: number) => setPackPrice(Math.max(1, v)) },
+        { label: 'Cards per pack', value: cardsInPack, min: 1, max: 20, step: 1, set: (v: number) => setCardsInPack(Math.min(20, Math.max(1, v))) },
+        { label: 'Conjuration rate %', value: conjurationRate, min: 0, max: 100, step: 1, set: (v: number) => setConjurationRate(Math.min(100, Math.max(0, v))) },
+    ];
+    const libraryInfo = [
+        ['Available cards', libStats.total],
+        ['Conjuration library', libStats.conjuration],
+        ['Staple library', libStats.staple],
+        ['Packs this batch', packCount],
+        ['Cards this batch', totalCards],
+    ] as const;
+    const sessionStats = [
+        { label: 'Opened packs', value: packs.length },
+        { label: 'Opened cards', value: stats.totalOpened },
+        { label: 'Conjuration pulls', value: stats.pool.conjuration ?? 0 },
+        { label: 'Staple pulls', value: stats.pool.staple ?? 0 },
+        { label: 'Avg. level', value: stats.averageLevel },
+        { label: 'Shiny pulls', value: stats.shiny },
+    ] as const;
 
     function setWeight(rarity: SpellRarity, value: number) {
         setRarityWeights((cur) => ({ ...cur, [rarity]: Math.max(0, value) }));
@@ -134,11 +158,32 @@ export default function App() {
             generatePack(cardsInPack, conjurationRate / 100, rarityWeights)));
         setLastOpenedAt(new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + ' at ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }));
         setSelectedCard(null);
+        setShowMobileSettings(false);
     }
     function clearResults() {
         setPacks([]);
         setLastOpenedAt(null);
         setSelectedCard(null);
+        setShowMobileStats(false);
+    }
+    function handleCardTouchStart(e: TouchEvent<HTMLDivElement>) {
+        const touch = e.changedTouches[0];
+        touchStart.current = { x: touch.clientX, y: touch.clientY };
+    }
+    function handleCardTouchEnd(e: TouchEvent<HTMLDivElement>) {
+        if (!selectedCard || !touchStart.current) return;
+        const touch = e.changedTouches[0];
+        const dx = touch.clientX - touchStart.current.x;
+        const dy = touch.clientY - touchStart.current.y;
+        touchStart.current = null;
+
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 48) {
+            navigate(0, dx > 0 ? -1 : 1);
+            return;
+        }
+        if (Math.abs(dy) > 64) {
+            navigate(dy > 0 ? -1 : 1, 0);
+        }
     }
 
     // Derived modal nav state
@@ -147,16 +192,92 @@ export default function App() {
     const canNextCard = selectedCard != null && currentPack != null && selectedCard.cardIndex < currentPack.length - 1;
     const canPrevPack = selectedCard != null && selectedCard.packIndex > 0;
     const canNextPack = selectedCard != null && selectedCard.packIndex < packs.length - 1;
+    const mobileSettingsPanel = (
+        <div className={`${panel} overflow-hidden xl:hidden`}>
+            <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
+                <p className={secTitle}>Pack settings</p>
+                {packSettings.map(({ label, value, min, max, step, set }) => (
+                    <label key={label} className={field}>
+                        <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium">{label}</span>
+                        <input type="number" min={min} max={max} step={step} value={value}
+                            onChange={(e) => set(Number(e.target.value) || 0)} className={inp} />
+                    </label>
+                ))}
+            </div>
+
+            <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
+                <p className={secTitle}>Rarity weights</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {rarityOrder.map((rarity) => (
+                        <label key={rarity} className={field}>
+                            <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium capitalize">{formatRarity(rarity)}</span>
+                            <input type="number" min={0} step={1} value={rarityWeights[rarity]}
+                                onChange={(e) => setWeight(rarity, Number(e.target.value) || 0)} className={inp} />
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            <div className="px-4 py-3 grid gap-2.5">
+                <p className={secTitle}>Information</p>
+                <ul className="list-none p-0 m-0 grid gap-1.5">
+                    {libraryInfo.map(([label, val]) => (
+                        <li key={String(label)} className={row}>
+                            <span className="text-slate-300">{label}</span>
+                            <strong className="text-slate-100">{val}</strong>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+    );
 
     return (
         <main className="h-screen overflow-y-auto xl:overflow-hidden">
+            <div className="sticky top-0 z-10 px-2 pt-2 pb-3 xl:hidden bg-gradient-to-b from-slate-950 via-slate-950/95 to-transparent">
+                <div className={`${panel} p-3`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className={eyebrow}>5e Scroll Pack Opener</p>
+                            <div className="text-base font-semibold text-slate-50">Quick controls</div>
+                            <p className="text-xs text-slate-400 mt-1 mb-0">{packCount} pack(s) ready · {totalCards} cards in this batch</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowMobileSettings((cur) => !cur)}
+                            className="shrink-0 rounded-xl px-3 py-2 bg-white/8 text-slate-200 text-sm font-medium transition-all hover:bg-white/12 border border-slate-700/50"
+                        >
+                            {showMobileSettings ? 'Hide controls' : 'Controls'}
+                        </button>
+                    </div>
+                    <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <button
+                            type="button"
+                            onClick={openPacks}
+                            disabled={packCount === 0 || cardsInPack <= 0}
+                            className="rounded-xl px-4 py-3 bg-gradient-to-br from-violet-500 to-blue-500 text-white text-base font-semibold shadow-lg transition-all hover:-translate-y-px hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0 disabled:brightness-100 border-0"
+                        >
+                            Open {packCount} pack{packCount !== 1 ? 's' : ''}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={clearResults}
+                            className="rounded-xl px-4 py-2 bg-white/8 text-slate-200 text-sm font-medium transition-all hover:-translate-y-px hover:bg-white/12 border border-slate-700/50"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    {lastOpenedAt && <p className="text-xs text-slate-500 mt-2 mb-0">Last batch: {lastOpenedAt}</p>}
+                </div>
+                {showMobileSettings && <div className="mt-3">{mobileSettingsPanel}</div>}
+            </div>
 
             {/* ── Centered max-width shell ── */}
             <section className="grid min-h-full max-w-screen-3xl mx-auto gap-3 px-2 py-3 md:grid-cols-2 xl:h-full xl:grid-cols-[18rem_minmax(0,1fr)_14rem] xl:px-1 xl:py-0">
 
                 {/* ══ LEFT RAIL ════════════════════════════ */}
                 {/* Vertically centered, fixed width, scrollable if content overflows */}
-                <aside className="min-w-0 flex flex-col xl:overflow-y-auto xl:py-4">
+                <aside className="hidden min-w-0 xl:flex xl:flex-col xl:overflow-y-auto xl:py-4">
                     <div className={`${panel} grid gap-0 p-0 overflow-hidden`}>
 
                         {/* Brand header */}
@@ -188,12 +309,7 @@ export default function App() {
                         {/* Pack settings */}
                         <div className="px-4 py-3 border-b border-slate-700/50 grid gap-2.5">
                             <p className={secTitle}>Pack settings</p>
-                            {[
-                                { label: 'Gold budget', value: gold, min: 0, max: undefined, step: 5, set: (v: number) => setGold(Math.max(0, v)) },
-                                { label: 'Gold per pack', value: packPrice, min: 1, max: undefined, step: 5, set: (v: number) => setPackPrice(Math.max(1, v)) },
-                                { label: 'Cards per pack', value: cardsInPack, min: 1, max: 20, step: 1, set: (v: number) => setCardsInPack(Math.min(20, Math.max(1, v))) },
-                                { label: 'Conjuration rate %', value: conjurationRate, min: 0, max: 100, step: 1, set: (v: number) => setConjurationRate(Math.min(100, Math.max(0, v))) },
-                            ].map(({ label, value, min, max, step, set }) => (
+                            {packSettings.map(({ label, value, min, max, step, set }) => (
                                 <label key={label} className={field}>
                                     <span className="text-xs uppercase tracking-wider text-indigo-300/80 font-medium">{label}</span>
                                     <input type="number" min={min} max={max} step={step} value={value}
@@ -220,13 +336,7 @@ export default function App() {
                         <div className="px-4 py-3 grid gap-2.5">
                             <p className={secTitle}>Information</p>
                             <ul className="list-none p-0 m-0 grid gap-1.5">
-                                {[
-                                    ['Available cards', libStats.total],
-                                    ['Conjuration library', libStats.conjuration],
-                                    ['Staple library', libStats.staple],
-                                    ['Packs this batch', packCount],
-                                    ['Cards this batch', totalCards],
-                                ].map(([label, val]) => (
+                                {libraryInfo.map(([label, val]) => (
                                     <li key={String(label)} className={row}>
                                         <span className="text-slate-300">{label}</span>
                                         <strong className="text-slate-100">{val}</strong>
@@ -238,20 +348,20 @@ export default function App() {
                 </aside>
 
                 {/* ══ CENTER: scrollable spell cards ════════════════════ */}
-                <section className="min-w-0 px-0 md:col-span-2 xl:col-span-1 xl:overflow-y-auto xl:py-4 xl:px-3">
+                <section className="min-w-0 px-0 pb-24 md:col-span-2 xl:col-span-1 xl:overflow-y-auto xl:py-4 xl:px-3 xl:pb-4">
                     <div className="grid gap-3">
 
                         {/* Spell cards panel */}
-                        <div className={`${panel} p-4 w-full`}>
+                        <div className={`${panel} p-3 sm:p-4 w-full`}>
                             <div className="flex flex-col items-start justify-between gap-1.5 mb-3 sm:flex-row sm:items-center sm:gap-2">
                                 <h2 className="text-base font-semibold text-slate-100 mt-0 mb-0">Spell cards</h2>
                                 <span className={muted}>{packs.length} pack(s)</span>
                             </div>
 
                             {packs.length === 0 ? (
-                                <div className="border border-dashed border-slate-700/60 rounded-xl p-8 text-center">
+                                <div className="border border-dashed border-slate-700/60 rounded-xl p-6 sm:p-8 text-center">
                                     <p className="text-slate-300 font-medium mb-1">No packs opened yet.</p>
-                                    <span className="text-slate-500 text-sm">Configure the left column and press Open packs.</span>
+                                    <span className="text-slate-500 text-sm">Use the Controls bar to tune the pack, then open it here.</span>
                                 </div>
                             ) : (
                                 <div className="grid gap-3">
@@ -306,21 +416,13 @@ export default function App() {
                 </section>
 
                 {/* ══ RIGHT RAIL: stats + analysis (vertically centered) ═ */}
-                <aside className="min-w-0 grid gap-3 md:grid-cols-2 md:col-span-2 xl:grid-cols-1 xl:col-span-1 xl:overflow-y-auto xl:py-4">
+                <aside className="hidden min-w-0 xl:grid xl:gap-3 xl:grid-cols-1 xl:col-span-1 xl:overflow-y-auto xl:py-4">
 
                     {/* Session stats panel */}
                     <section className={`${panel} p-4`}>
                         <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-3">Session stats</h2>
                         <div className="grid gap-2">
-                            {[
-                                { label: 'Opened packs', value: packs.length },
-                                { label: 'Opened cards', value: stats.totalOpened },
-                                { label: 'Conjuration pulls', value: stats.pool.conjuration ?? 0 },
-                                { label: 'Staple pulls', value: stats.pool.staple ?? 0 },
-                                { label: 'Avg. level', value: stats.averageLevel },
-                                { label: 'Shiny pulls', value: stats.shiny },
-                                // { label: 'Last opened',       value: lastOpenedAt ?? '—' },
-                            ].map(({ label, value }) => (
+                            {sessionStats.map(({ label, value }) => (
                                 <div key={label} className="flex justify-between items-baseline gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-slate-700/50">
                                     <span className={statLabel + ' shrink-0'}>{label}</span>
                                     <strong className="text-sm font-bold text-slate-100 text-right leading-none">{value}</strong>
@@ -357,6 +459,66 @@ export default function App() {
 
                 </aside>
             </section>
+
+            <div className="xl:hidden fixed inset-x-2 bottom-2 z-10">
+                {showMobileStats && (
+                    <div className={`${panel} mb-2 p-3`}>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <section className="grid gap-2">
+                                <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-0">Session stats</h2>
+                                {sessionStats.slice(0, 4).map(({ label, value }) => (
+                                    <div key={label} className="flex justify-between gap-2 text-xs rounded-lg bg-white/5 border border-slate-700/50 px-3 py-2">
+                                        <span className="text-slate-300">{label}</span>
+                                        <strong className="text-slate-100">{value}</strong>
+                                    </div>
+                                ))}
+                            </section>
+                            <section className="grid gap-2">
+                                <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-0">Rarity</h2>
+                                {rarityOrder.map((rarity) => (
+                                    <div key={rarity} className="flex justify-between gap-2 text-xs rounded-lg bg-white/5 border border-slate-700/50 px-3 py-2">
+                                        <span className="text-slate-300 capitalize">{formatRarity(rarity)}</span>
+                                        <strong className="text-slate-100">{stats.rarity[rarity] ?? 0}</strong>
+                                    </div>
+                                ))}
+                            </section>
+                            <section className="grid gap-2">
+                                <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0 mb-0">Schools</h2>
+                                {schoolOrder.slice(0, 5).map((school) => (
+                                    <div key={school} className="flex justify-between gap-2 text-xs rounded-lg bg-white/5 border border-slate-700/50 px-3 py-2">
+                                        <span className="text-slate-300">{school}</span>
+                                        <strong className="text-slate-100">{stats.schools[school] ?? 0}</strong>
+                                    </div>
+                                ))}
+                            </section>
+                        </div>
+                    </div>
+                )}
+                <div className={`${panel} px-3 py-2.5`}>
+                    <div className="flex items-center gap-3">
+                        <div className="grid flex-1 grid-cols-4 gap-2">
+                            {[
+                                { label: 'Packs', value: packs.length },
+                                { label: 'Cards', value: stats.totalOpened },
+                                { label: 'Shiny', value: stats.shiny },
+                                { label: 'Avg', value: stats.averageLevel },
+                            ].map(({ label, value }) => (
+                                <div key={label} className="rounded-xl bg-white/5 border border-slate-700/50 px-2 py-2 text-center">
+                                    <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+                                    <div className="text-sm font-semibold text-slate-50">{value}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowMobileStats((cur) => !cur)}
+                            className="shrink-0 rounded-xl px-3 py-2 bg-white/8 text-slate-200 text-sm font-medium transition-all hover:bg-white/12 border border-slate-700/50"
+                        >
+                            {showMobileStats ? 'Hide' : 'Stats'}
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             {/* ══ MODAL LIGHTBOX ═══════════════════════════ */}
             {selectedCard && (
@@ -428,7 +590,12 @@ export default function App() {
                         <div className="flex flex-col sm:flex-row gap-0 overflow-hidden flex-1 min-h-0">
 
                             {/* Image area: [‹] [image] [›] as flex columns */}
-                            <div className="flex items-stretch sm:w-3/5 min-h-[16rem] sm:min-h-0 bg-slate-950/60">
+                            <div
+                                className="flex items-stretch sm:w-3/5 min-h-[16rem] sm:min-h-0 bg-slate-950/60 touch-pan-y"
+                                onTouchStart={handleCardTouchStart}
+                                onTouchEnd={handleCardTouchEnd}
+                                onTouchCancel={() => { touchStart.current = null; }}
+                            >
 
                                 {/* Prev card button — left column */}
                                 <button
