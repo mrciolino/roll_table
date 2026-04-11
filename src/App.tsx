@@ -16,12 +16,14 @@ type GeneratedResult = {
     card: SpellCard;
     pool: SpellPool;
     isShiny: boolean;
+    isAutographed: boolean;
 };
 
 type SelectedCard = {
     card: SpellCard;
     pool: SpellPool;
     isShiny: boolean;
+    isAutographed: boolean;
     packIndex: number;
     cardIndex: number;
 };
@@ -52,6 +54,7 @@ const field = 'grid gap-1 p-2 rounded-xl bg-white/5 border border-slate-700/50';
 const row = 'flex justify-between gap-3 px-3 py-1.5 text-xs rounded-lg bg-white/5 border border-slate-700/50';
 const tag = 'px-2 py-0.5 rounded-full text-indigo-200 text-xs bg-indigo-500/15 border border-indigo-400/15';
 const shinyTag = 'px-2 py-0.5 rounded-full text-xs bg-gradient-to-r from-slate-300/40 to-slate-400/20 border border-slate-300/30 text-white';
+const autographedTag = 'px-2 py-0.5 rounded-full text-xs bg-gradient-to-r from-amber-400/40 to-yellow-300/20 border border-amber-400/30 text-amber-100';
 const rarityTagClasses: Record<SpellRarity, string> = {
     common: 'text-slate-200 bg-slate-800/15 border-slate-300/20',
     uncommon: 'text-emerald-200 bg-emerald-800/15 border-emerald-400/20',
@@ -86,7 +89,8 @@ function generatePack(n: number, conjRate: number, weights: Record<SpellRarity, 
             throw new Error('No spell cards are available to generate a pack.');
         }
         const card = weightedPick(cards, (e) => weights[e.rarity] ?? 0);
-        return { card, pool, isShiny: Math.random() < 0.10 }; // 10% shiny rate, just for fun
+        const isAutographed = (card.rarity === 'rare' || card.rarity === 'legendary') && Math.random() < 0.05;
+        return { card, pool, isShiny: Math.random() < 0.10, isAutographed }; // 10% shiny rate, just for fun
     });
 }
 function countBy<T extends string>(values: T[]) {
@@ -155,7 +159,7 @@ export default function App() {
             const newCardIndex = Math.max(0, Math.min(newPack.length - 1, cur.cardIndex + dCard));
             const entry = newPack[newCardIndex];
             if (!entry) return null;
-            return { card: entry.card, pool: entry.pool, isShiny: entry.isShiny, packIndex: newPackIndex, cardIndex: newCardIndex };
+            return { card: entry.card, pool: entry.pool, isShiny: entry.isShiny, isAutographed: entry.isAutographed, packIndex: newPackIndex, cardIndex: newCardIndex };
         });
     }, [visiblePacks]);
 
@@ -186,6 +190,7 @@ export default function App() {
             totalOpened: all.length,
             averageLevel: all.length ? (all.reduce((s, e) => s + e.card.level, 0) / all.length).toFixed(1) : '0.0',
             shiny: all.filter((e) => e.isShiny).length,
+            autographed: all.filter((e) => e.isAutographed).length,
             rarity: countBy(all.map((e) => e.card.rarity)),
             pool: countBy(all.map((e) => e.pool)),
             schools: countBy(all.map((e) => e.card.school)),
@@ -216,6 +221,7 @@ export default function App() {
         { label: 'Staple pulls', value: stats.pool.staple ?? 0 },
         { label: 'Avg. level', value: stats.averageLevel },
         { label: 'Shiny pulls', value: stats.shiny },
+        { label: 'Autographed pulls', value: stats.autographed },
     ] as const;
 
     const rarityWeightSum = Object.values(rarityWeights).reduce((a, b) => a + b, 0);
@@ -391,10 +397,10 @@ export default function App() {
                                     {pack.map((entry, cardIndex) => (
                                         <li
                                             key={`${entry.card.id}-${cardIndex}`}
-                                            onClick={() => setSelectedCard({ card: entry.card, pool: entry.pool, isShiny: entry.isShiny, packIndex, cardIndex })}
+                                            onClick={() => setSelectedCard({ card: entry.card, pool: entry.pool, isShiny: entry.isShiny, isAutographed: entry.isAutographed, packIndex, cardIndex })}
                                             className="p-2.5 rounded-xl bg-white/4 border border-slate-700/40 hover:bg-white/8 transition-colors cursor-zoom-in"
                                         >
-                                            <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-3 items-center relative sm:grid-cols-[6rem_minmax(0,1fr)]${entry.isShiny ? ' shiny-card' : ''}`}>
+                                            <div className={`grid grid-cols-[5rem_minmax(0,1fr)] gap-3 items-center relative sm:grid-cols-[6rem_minmax(0,1fr)]${entry.isShiny ? ' shiny-card' : ''}${entry.isAutographed ? ' autographed-card' : ''}`}>
                                                 <img
                                                     src={entry.card.imageUrl}
                                                     alt={entry.card.fileName}
@@ -406,6 +412,7 @@ export default function App() {
                                                     <div className="text-xs text-slate-500 mb-2 break-words">{entry.card.fileName}.png</div>
                                                     <div className="flex flex-wrap gap-1">
                                                         {entry.isShiny && <span className={shinyTag}>Shiny</span>}
+                                                        {entry.isAutographed && <span className={autographedTag}>Autographed</span>}
                                                         <span className={tag}>{entry.card.school}</span>
                                                         <span className={tag}>Level {entry.card.level}</span>
                                                         <span className={`px-2 py-0.5 rounded-full text-xs border ${getRarityTagClass(entry.card.rarity)}`}>{formatRarity(entry.card.rarity)}</span>
@@ -633,7 +640,7 @@ export default function App() {
                                 { label: 'Packs', value: visiblePacks.length },
                                 { label: 'Cards', value: stats.totalOpened },
                                 { label: 'Shiny', value: stats.shiny },
-                                { label: 'Avg', value: stats.averageLevel },
+                                { label: 'Autog.', value: stats.autographed },
                             ].map(({ label, value }) => (
                                 <div key={label} className="rounded-xl bg-white/5 border border-slate-700/50 px-2 py-2 text-center">
                                     <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
@@ -742,6 +749,9 @@ export default function App() {
                                         {selectedCard.isShiny && (
                                             <div className="shiny-card absolute inset-0 pointer-events-none" />
                                         )}
+                                        {selectedCard.isAutographed && (
+                                            <div className="autographed-card absolute inset-0 pointer-events-none" />
+                                        )}
                                         <img
                                             src={selectedCard.card.imageUrl}
                                             alt={selectedCard.card.displayName}
@@ -794,6 +804,7 @@ export default function App() {
                                     {/* Tags */}
                                     <div className="flex flex-wrap gap-2">
                                         {selectedCard.isShiny && <span className={shinyTag}>✦ Shiny</span>}
+                                        {selectedCard.isAutographed && <span className={autographedTag}>✍ Autographed</span>}
                                         <span className="px-3 py-1 rounded-lg text-sm text-slate-300 bg-white/5 border border-slate-700/50">
                                             {selectedCard.card.school}
                                         </span>
